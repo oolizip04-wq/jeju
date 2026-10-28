@@ -1,0 +1,2057 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>제주 카페·맛집 지도</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        :root {
+            --bg: #f6f5f1; --card: #fff; --text: #26302c; --muted: #6a746f; --line: #e4e2da;
+            --accent: #2f6f62; --accent-soft: #e4efeb; --cafe: #a0642a; --cafe-soft: #f5e9db;
+            --warn: #8a6d1d; --warn-soft: #fbf3d9;
+            --ok: #1f7a4d; --ok-soft: #dcf2e5; --off: #5f6b66; --off-soft: #e9ece9;
+            --rest: #b4691a; --rest-soft: #fbe9d2; --closed: #b3412f; --closed-soft: #f8e1dc;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #151a1b; --card: #1e2425; --text: #e6ebe8; --muted: #98a39d; --line: #2e3637;
+                --accent: #6fb7a6; --accent-soft: #22332f; --cafe: #e0a867; --cafe-soft: #3a2f21;
+                --warn: #e6c766; --warn-soft: #373018;
+                --ok: #6fd6a0; --ok-soft: #1d3a2b; --off: #a8b3ad; --off-soft: #2a3132;
+                --rest: #f0b46a; --rest-soft: #3d3020; --closed: #f09a8a; --closed-soft: #402621;
+            }
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif; line-height: 1.65; }
+        main { max-width: 1000px; margin: 0 auto; padding: 28px 16px 64px; }
+        h1 { margin: 0 0 4px; font-size: 1.55rem; }
+        .sub { margin: 0; color: var(--muted); }
+        .notice { margin: 14px 0; padding: 10px 14px; border-radius: 12px; background: var(--warn-soft); color: var(--warn); font-size: .88rem; }
+
+        .group { margin-top: 14px; }
+        .group h2 { margin: 0 0 6px; font-size: .8rem; letter-spacing: .05em; color: var(--muted); }
+        .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+        .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; font: inherit; font-size: .9rem; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
+        .chip small { font-size: .75rem; color: var(--muted); }
+        .chip.low small { color: var(--warn); }
+        .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .chip.on small { color: inherit; opacity: .85; }
+        @media (prefers-color-scheme: dark) { .chip.on { color: #10201c; } }
+        .chip.reset { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+        button:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 8px; }
+        .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
+        .seg button { border: 0; background: transparent; color: var(--text); font: inherit; font-size: .9rem; padding: 6px 14px; cursor: pointer; }
+        .seg button.on { background: var(--accent); color: #fff; }
+        @media (prefers-color-scheme: dark) { .seg button.on { color: #10201c; } }
+        .legend { color: var(--muted); font-size: .82rem; }
+
+        #map { height: 56vh; min-height: 340px; border-radius: 14px; border: 1px solid var(--line); }
+        .pin { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50% 50% 50% 4px; transform: rotate(-45deg); border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+        .pin span { transform: rotate(45deg); font-size: 15px; line-height: 1; }
+        .pin.cafe { background: #c9803a; }
+        .pin.food { background: #2f8f7a; }
+        .pin.approx { border-style: dashed; opacity: .8; }
+        .leaflet-container { font-family: inherit; }
+
+        .panel { margin-top: 18px; }
+        .panel-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; justify-content: space-between; }
+        .panel-head h2 { margin: 0; font-size: 1.2rem; }
+        .panel-head h2 small { margin-left: 8px; font-size: .8rem; font-weight: normal; color: var(--muted); }
+        .meta { font-size: .8rem; color: var(--muted); margin: 4px 0 12px; }
+        .meta button { margin-left: 6px; font: inherit; font-size: .8rem; color: var(--accent); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 1px 10px; cursor: pointer; }
+        .err { color: var(--closed); }
+        .empty { padding: 16px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); }
+
+        .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
+        .card { padding: 14px 16px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; cursor: pointer; }
+        .card:hover { border-color: var(--accent); }
+        .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+        .card h3 { margin: 0; font-size: 1.02rem; }
+        .tag { display: inline-block; padding: 0 9px; font-size: .74rem; border-radius: 999px; margin: 4px 0 6px; }
+        .tag.cafe { background: var(--cafe-soft); color: var(--cafe); }
+        .tag.food { background: var(--accent-soft); color: var(--accent); }
+        .addr { margin: 0 0 4px; font-size: .84rem; color: var(--muted); }
+        .desc { margin: 0 0 6px; font-size: .9rem; }
+        .hint { margin: 0 0 6px; font-size: .78rem; color: var(--warn); }
+        .info { margin: 0 0 6px; font-size: .86rem; }
+        .card a, .pop a { font-size: .8rem; color: var(--accent); }
+
+        .badge { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 1px 10px; font-size: .78rem; font-weight: 700; border-radius: 999px; white-space: nowrap; }
+        .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+        .badge.s-open { background: var(--ok-soft); color: var(--ok); }
+        .badge.s-end, .badge.s-unknown, .badge.s-wait { background: var(--off-soft); color: var(--off); }
+        .badge.s-rest { background: var(--rest-soft); color: var(--rest); }
+        .badge.s-closed { background: var(--closed-soft); color: var(--closed); }
+        .badge.s-load::before { animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: .25; } }
+
+        .maplinks { display: inline-flex; gap: 10px; margin-right: 10px; }
+        .pop { min-width: 190px; }
+        .pop h4 { margin: 0 0 4px; font-size: 1rem; }
+        .pop p { margin: 2px 0; font-size: .85rem; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>☕🍜 제주 카페·맛집 지도</h1>
+    <p class="sub">동을 누르면 지도가 그 동으로 확대되고 카페와 맛집이 표시돼요.</p>
+
+    <div class="notice" id="notice"></div>
+
+    <div id="chipArea"></div>
+
+    <div class="bar">
+        <div class="seg" id="catSeg"></div>
+        <span class="legend">☕ 카페 · 🍽️ 음식점 · 점선 핀은 정확한 위치를 못 찾아 동 근처에 둔 곳</span>
+    </div>
+
+    <div id="map"></div>
+
+    <section class="panel" id="panel"></section>
+</main>
+
+<!-- 조사한 데이터: dongCenters 는 동 중심 좌표, items 의 lat/lng 는 지도 위치, geo 는 위치를 찾은 방법(address·name·none) -->
+<script id="data" type="application/json">
+{
+    "region":  "제주특별자치도",
+    "topic":  "제주 카페·맛집",
+    "dongCenters":  {
+                        "일도1동":  {
+                                     "lat":  33.513285,
+                                     "lng":  126.527904
+                                 },
+                        "이도1동":  {
+                                     "lat":  33.50659,
+                                     "lng":  126.5269
+                                 },
+                        "이도2동":  {
+                                     "lat":  33.490969,
+                                     "lng":  126.531026
+                                 },
+                        "삼도1동":  {
+                                     "lat":  33.504177,
+                                     "lng":  126.520236
+                                 },
+                        "삼도2동":  {
+                                     "lat":  33.51205,
+                                     "lng":  126.520188
+                                 },
+                        "용담1동":  {
+                                     "lat":  33.50859,
+                                     "lng":  126.51488
+                                 },
+                        "용담2동":  {
+                                     "lat":  33.514668,
+                                     "lng":  126.498054
+                                 },
+                        "건입동":  {
+                                    "lat":  33.51474,
+                                    "lng":  126.53935
+                                },
+                        "화북동":  {
+                                    "lat":  33.514272,
+                                    "lng":  126.565117
+                                },
+                        "삼양동":  {
+                                    "lat":  33.523502,
+                                    "lng":  126.58782
+                                },
+                        "봉개동":  {
+                                    "lat":  33.484188,
+                                    "lng":  126.59935
+                                },
+                        "아라동":  {
+                                    "lat":  33.431158,
+                                    "lng":  126.56306
+                                },
+                        "오라동":  {
+                                    "lat":  33.431274,
+                                    "lng":  126.518344
+                                },
+                        "연동":  {
+                                   "lat":  33.47575,
+                                   "lng":  126.49418
+                               },
+                        "노형동":  {
+                                    "lat":  33.478125,
+                                    "lng":  126.475487
+                                },
+                        "외도동":  {
+                                    "lat":  33.49198,
+                                    "lng":  126.434887
+                                },
+                        "이호동":  {
+                                    "lat":  33.50987,
+                                    "lng":  126.452776
+                                },
+                        "도두동":  {
+                                    "lat":  33.510034,
+                                    "lng":  126.473526
+                                },
+                        "송산동":  {
+                                    "lat":  33.232048,
+                                    "lng":  126.586061
+                                },
+                        "정방동":  {
+                                    "lat":  33.245466,
+                                    "lng":  126.56489
+                                },
+                        "중앙동":  {
+                                    "lat":  33.250908,
+                                    "lng":  126.564239
+                                },
+                        "천지동":  {
+                                    "lat":  33.238197,
+                                    "lng":  126.55276
+                                },
+                        "효돈동":  {
+                                    "lat":  33.253131,
+                                    "lng":  126.616336
+                                },
+                        "영천동":  {
+                                    "lat":  33.306934,
+                                    "lng":  126.577602
+                                },
+                        "동홍동":  {
+                                    "lat":  33.26184,
+                                    "lng":  126.56804
+                                },
+                        "서홍동":  {
+                                    "lat":  33.25965,
+                                    "lng":  126.55175
+                                },
+                        "대륜동":  {
+                                    "lat":  33.281949,
+                                    "lng":  126.521936
+                                },
+                        "대천동":  {
+                                    "lat":  33.28413,
+                                    "lng":  126.490868
+                                },
+                        "중문동":  {
+                                    "lat":  33.262002,
+                                    "lng":  126.428862
+                                },
+                        "예래동":  {
+                                    "lat":  33.288415,
+                                    "lng":  126.398368
+                                },
+                        "일도2동":  {
+                                     "lat":  33.5115,
+                                     "lng":  126.5435
+                                 }
+                    },
+    "items":  [
+                  {
+                      "name":  "대한식당 일도점",
+                      "category":  "음식점",
+                      "dong":  "일도2동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 고마로 95 1층 (지번 일도이동 377-22)",
+                      "description":  "고기 요리로 소개되는 식당으로, 고마로에 위치한다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/P/1724271"
+                  },
+                  {
+                      "name":  "문화카페시공",
+                      "category":  "카페",
+                      "dong":  "일도2동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 일도2동 (도로명 미확인)",
+                      "description":  "당근 동네 프로필에 일도2동 카페로 등록되어 있으며 저녁 8시 이후에는 커피앤펍으로도 운영한다고 안내한다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.daangn.com/kr/local-profile/%EB%AC%B8%ED%99%94%EC%B9%B4%ED%8E%98%EC%8B%9C%EA%B3%B5-5tg2faa5ssrz/"
+                  },
+                  {
+                      "name":  "에퀴드",
+                      "category":  "카페",
+                      "dong":  "이도1동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 이도1동 (도로명 미확인)",
+                      "description":  "당근 동네 프로필에 이도1동 카페로 등록되어 있고 커피, 페스츄리 파이, 브런치 메뉴를 판매한다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://daangn.com/kr/local-profile/%EC%97%90%ED%80%B4%EB%93%9C-k2krpdxbdag5/"
+                  },
+                  {
+                      "name":  "로당",
+                      "category":  "음식점",
+                      "dong":  "이도2동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 이도2동 1769-8 (지번)",
+                      "description":  "메뉴판닷컴에 이도2동 지역맛집(해산물, 한식)으로 등재되어 있으며 17:00~02:30 영업으로 표기된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.menupan.com/restaurant/onepage.asp?acode=H600876"
+                  },
+                  {
+                      "name":  "통큰식당",
+                      "category":  "음식점",
+                      "dong":  "이도2동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 이도2동 (도로명 미확인)",
+                      "description":  "당근 업체 정보에 이도2동으로 등록된 동태탕 전문점.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://daangn.com/kr/local-profile/%ED%86%B5%ED%81%B0%EC%8B%9D%EB%8B%B9-je2k3u8gdpvk/"
+                  },
+                  {
+                      "name":  "모리노코에",
+                      "category":  "카페",
+                      "dong":  "이도2동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 구남로2길 30",
+                      "description":  "2011년부터 영업해 온 이도2동 카페로 원두를 직접 로스팅하고 유기농 재료와 발효종 베이커리를 낸다고 소개된다.",
+                      "lat":  33.48776,
+                      "lng":  126.533872,
+                      "geo":  "address",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://hotplacehunter.co.kr/msn/article/55972/"
+                  },
+                  {
+                      "name":  "순아커피",
+                      "category":  "카페",
+                      "dong":  "삼도2동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 관덕로 32-1",
+                      "description":  "관덕정 앞 일본식 적산가옥을 개조한 카페로 소개된다.",
+                      "lat":  33.513069,
+                      "lng":  126.522732,
+                      "geo":  "address",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://polle.com/place/3u4WBc/%EC%88%9C%EC%95%84%20%EC%BB%A4%ED%94%BC"
+                  },
+                  {
+                      "name":  "카페판",
+                      "category":  "카페",
+                      "dong":  "삼도2동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 무근성길 29-2",
+                      "description":  "당근 동네 프로필에 삼도2동 카페로 등록되어 있다.",
+                      "lat":  33.51536,
+                      "lng":  126.519744,
+                      "geo":  "address",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.daangn.com/kr/local-profile/%EC%B9%B4%ED%8E%98%ED%8C%90-7iw9cvy2yraq/"
+                  },
+                  {
+                      "name":  "도주제분식",
+                      "category":  "음식점",
+                      "dong":  "삼도2동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 삼도2동 (관덕정 인근, 도로명 미확인)",
+                      "description":  "관덕정 돌담길이 내려다보이는 2층 공간에서 김밥, 우동, 떡볶이 등을 파는 분식집.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.daangn.com/kr/local-profile/%EB%8F%84%EC%A3%BC%EC%A0%9C%EB%B6%84%EC%8B%9D-n6h3zkk5fuab/"
+                  },
+                  {
+                      "name":  "용소담",
+                      "category":  "카페",
+                      "dong":  "용담2동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 흥운길 103 (지번: 용담2동 443)",
+                      "description":  "정원이 있는 고쳐 지은 주택 분위기의 카페로, 야외 좌석과 빈티지 인테리어가 특징입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=eSoa9AwDCqYo"
+                  },
+                  {
+                      "name":  "드롭탑 제주용담해안도로점",
+                      "category":  "카페",
+                      "dong":  "용담2동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 서해안로 540 (지번: 용담삼동 1145-2)",
+                      "description":  "용담해안도로변에 있는 바다 전망 카페로 2층이 넓고 한라봉주스 등이 인기 메뉴입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=J0cYzm017qbQ"
+                  },
+                  {
+                      "name":  "용담밭담",
+                      "category":  "음식점",
+                      "dong":  "용담2동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 서천길 16 (지번: 용담2동 2631-1)",
+                      "description":  "갈치조림, 옥돔구이, 흑돼지두루치기 등을 파는 제주 향토 한정식집으로 좌석이 넓고 주차장이 큽니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=C2lrqnCLoXiS"
+                  },
+                  {
+                      "name":  "용두네해장국",
+                      "category":  "음식점",
+                      "dong":  "용담2동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 서해안로 456-4 (지번: 용담삼동 2384)",
+                      "description":  "접짝뼈국과 고사리해장국, 돔베고기로 알려진 제주공항 인근 해장국집입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=iQkbJIntBSSm"
+                  },
+                  {
+                      "name":  "사라봉주물럭",
+                      "category":  "음식점",
+                      "dong":  "건입동",
+                      "area":  "제주시",
+                      "address":  "제주시 건입동 674-50 (사라봉길 7로 소개됨)",
+                      "description":  "건입동 사라봉 인근의 한식(주물럭) 식당으로 2017년 인허가 기록이 있습니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "http://duli.co.kr/web/splus/kmap/view.php?sigun=6500000\u0026gugun=6510000\u0026keyno=107\u0026keyname=%EC%82%AC%EB%9D%BC%EB%B4%89%EC%A3%BC%EB%AC%BC%EB%9F%AD\u0026keylink=6510000-101-2017-00329\u0026page=59"
+                  },
+                  {
+                      "name":  "카페물결",
+                      "category":  "카페",
+                      "dong":  "건입동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 사라봉동길 108-1",
+                      "description":  "제주항이 보이는 갤러리 카페로 사진 전시와 토요일 버스킹 행사가 소개됩니다.",
+                      "lat":  33.519551,
+                      "lng":  126.543441,
+                      "geo":  "address",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/P/1297093"
+                  },
+                  {
+                      "name":  "막내분식",
+                      "category":  "음식점",
+                      "dong":  "건입동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 관덕로11길 37 (지번: 건입동 1407-2)",
+                      "description":  "건입동의 분식집으로 제주 두리찾기 로컬맵에 등재되어 있습니다.",
+                      "lat":  33.516216,
+                      "lng":  126.525547,
+                      "geo":  "name",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "http://duli.co.kr/web/splus/kmap/view.php?sigun=6500000\u0026gugun=6510000\u0026keyno=111\u0026keyname=%EB%A7%89%EB%82%B4%EB%B6%84%EC%8B%9D\u0026keylink=6510000-101-2024-00581"
+                  },
+                  {
+                      "name":  "해동이네",
+                      "category":  "음식점",
+                      "dong":  "건입동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 임항로 242 (금아빌라) (지번: 건입동 872-1)",
+                      "description":  "백반/한정식을 파는 건입동 한식당입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://place.udanax.org/p/667386/%ED%95%B4%EB%8F%99%EC%9D%B4%EB%84%A4"
+                  },
+                  {
+                      "name":  "73스테이크",
+                      "category":  "음식점",
+                      "dong":  "건입동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 산지로 25 (지번: 건입동 1136)",
+                      "description":  "동문시장과 산지천 근처의 오마카세 스타일 스테이크 전문점입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://kr.trip.com/moments/detail/jeju-city-1446512-135990675/"
+                  },
+                  {
+                      "name":  "에이바우트커피 동화로점",
+                      "category":  "카페",
+                      "dong":  "화북동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 동화로 56 1층 (지번: 화북일동 1069-1)",
+                      "description":  "넓은 매장과 무료 주차, 모닝 아메리카노로 알려진 대형 카페입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=J5WTM6sxulFM"
+                  },
+                  {
+                      "name":  "정다방",
+                      "category":  "카페",
+                      "dong":  "화북동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 진동로 33 1층",
+                      "description":  "화과자와 우유얼음 팥빙수, 수제차를 파는 화이트·우드톤 카페입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/P/1823372"
+                  },
+                  {
+                      "name":  "돈짬 화북점",
+                      "category":  "음식점",
+                      "dong":  "화북동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 진남로4길 1 (지번: 화북일동 1964-21)",
+                      "description":  "짬뽕과 돈가스짬뽕이 주메뉴인 가성비 중식당입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=bKkZOu6YD01i"
+                  },
+                  {
+                      "name":  "훔쳐온뒷고기 화북삼화점",
+                      "category":  "음식점",
+                      "dong":  "화북동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 진동로5길 40 1층 (지번: 화북일동 1967-1)",
+                      "description":  "뽈살, 두항정살 등 특수부위가 섞여 나오는 돼지뒷고기 전문 고깃집입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=7TewgA3UwHlB"
+                  },
+                  {
+                      "name":  "아구식당",
+                      "category":  "음식점",
+                      "dong":  "삼양동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 일주동로 355 (삼양이동)",
+                      "description":  "식신 삼양동 맛집 큐레이션에 소개된 식당입니다(화요일 휴무, 브레이크타임 있음).",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/theme/magazine/14858"
+                  },
+                  {
+                      "name":  "화성식당",
+                      "category":  "음식점",
+                      "dong":  "삼양동",
+                      "area":  "제주시",
+                      "address":  "제주시 일주동로 383",
+                      "description":  "접짝뼈국 단일 메뉴를 점심에만 파는 곳으로 삼양동 맛집 큐레이션에 소개되었습니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/theme/magazine/14858"
+                  },
+                  {
+                      "name":  "호우코우",
+                      "category":  "카페",
+                      "dong":  "삼양동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 감수북길 18 1층",
+                      "description":  "삼양 검은모래 해변 근처의 바다 전망 카페로 핸드드립과 에스프레소 음료를 팝니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://polle.com/place/4GSoxM/%ED%98%B8%EC%9A%B0%EC%BD%94%EC%9A%B0"
+                  },
+                  {
+                      "name":  "삼화포구",
+                      "category":  "음식점",
+                      "dong":  "삼양동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 서흘1길 26 (지번: 삼양일동 1775)",
+                      "description":  "삼양해수욕장 인근의 횟집으로 회, 물회, 매운탕을 팝니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=WHHK4Y0A9asF"
+                  },
+                  {
+                      "name":  "에오마르",
+                      "category":  "카페",
+                      "dong":  "삼양동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 선사로8길 13-6 (삼양일동)",
+                      "description":  "삼양해수욕장 입구에 있는 3층 규모의 해변 베이커리 카페로 테라스와 루프탑이 있습니다.",
+                      "lat":  33.525778,
+                      "lng":  126.586576,
+                      "geo":  "address",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://mom-mom.net/travel/places/690877c4538f6ff43f3536dd"
+                  },
+                  {
+                      "name":  "봉개짬뽕",
+                      "category":  "음식점",
+                      "dong":  "봉개동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 봉개대동6길 5 1층 (지번: 봉개동 1291)",
+                      "description":  "짬뽕과 짜장면을 파는 중식당입니다(월요일 휴무, 브레이크타임 있음).",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=0LZAvmouxhWv"
+                  },
+                  {
+                      "name":  "명도암생이소리",
+                      "category":  "음식점",
+                      "dong":  "봉개동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 봉개동 234-236",
+                      "description":  "향토음식을 내는 식당으로 봉개동 맛집 목록에 올라 있습니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/list.dc?query=%EC%A0%9C%EC%A3%BC+%EC%A0%9C%EC%A3%BC%EC%8B%9C+%EB%B4%89%EA%B0%9C%EB%8F%99+%EB%AA%A8%EC%9E%84"
+                  },
+                  {
+                      "name":  "명도암정식",
+                      "category":  "음식점",
+                      "dong":  "봉개동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 명림로 218 (지번: 봉개동 289-1)",
+                      "description":  "백반/한정식을 파는 봉개동 한식당입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://place.udanax.org/p/68677/%EB%AA%85%EB%8F%84%EC%95%94%EC%A0%95%EC%8B%9D"
+                  },
+                  {
+                      "name":  "천해향식당",
+                      "category":  "음식점",
+                      "dong":  "봉개동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 삼봉로 354 (지번: 봉개동 1812-18)",
+                      "description":  "옥돔 정식 등을 파는 한식당입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/P/1330578"
+                  },
+                  {
+                      "name":  "금산서당골",
+                      "category":  "음식점",
+                      "dong":  "아라동",
+                      "area":  "제주시",
+                      "address":  "제주시 아라이동 936-1",
+                      "description":  "식신 아라동 점심 맛집 큐레이션(2026년 1월)에 소개된 식당입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/theme/magazine/9711"
+                  },
+                  {
+                      "name":  "케이빈",
+                      "category":  "카페",
+                      "dong":  "아라동",
+                      "area":  "제주시",
+                      "address":  "제주시 아라동 (도로명 미확인, 옆 공영주차장 제주시 아라일동 6120)",
+                      "description":  "직접 볶은 원두와 수제청 음료, 디저트, 브런치를 내는 로스터리 카페입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://daangn.com/kr/local-profile/%EC%BC%80%EC%9D%B4%EB%B9%88-tcgo4pza58ck/"
+                  },
+                  {
+                      "name":  "커피템플",
+                      "category":  "카페",
+                      "dong":  "아라동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 영평길 269",
+                      "description":  "텐저린 커피와 디저트를 내는 갤러리 카페로 다이닝코드 아라동 목록에서 평점 4.6입니다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/list.dc?query=%EC%A0%9C%EC%A3%BC%ED%8A%B9%EB%B3%84%EC%9E%90%EC%B9%98%EB%8F%84+%EC%A0%9C%EC%A3%BC%EC%8B%9C+%EC%95%84%EB%9D%BC%EB%8F%99+%EC%BB%A4%ED%94%BC"
+                  },
+                  {
+                      "name":  "오라성 제주",
+                      "category":  "음식점",
+                      "dong":  "오라동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 오라남로 16",
+                      "description":  "흑돼지 김치찜을 내는 식당으로 소개된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/list.dc?query=%EC%A0%9C%EC%A3%BC+%EC%A0%9C%EC%A3%BC%EC%8B%9C+%EC%98%A4%EB%9D%BC%EB%8F%99+%EC%8B%9D%EC%82%AC%EB%AA%A8%EC%9E%84"
+                  },
+                  {
+                      "name":  "가야밀면돼지국밥",
+                      "category":  "음식점",
+                      "dong":  "오라동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 오라일동 1083-2",
+                      "description":  "밀면과 돼지국밥을 파는 식당으로 매일 09:00~21:00 연중무휴로 안내된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/list.dc?query=%EC%A0%9C%EC%A3%BC+%EC%A0%9C%EC%A3%BC%EC%8B%9C+%EC%98%A4%EB%9D%BC%EB%8F%99+%ED%91%B8%EC%A7%90%ED%95%9C"
+                  },
+                  {
+                      "name":  "한우앤돈",
+                      "category":  "음식점",
+                      "dong":  "오라동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 오라로 50",
+                      "description":  "제주공항 근처의 한우 전문점으로 가게 앞 전용 주차장이 있다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/list.dc?query=%EC%A0%9C%EC%A3%BC+%EC%A0%9C%EC%A3%BC%EC%8B%9C+%EC%98%A4%EB%9D%BC%EB%8F%99+%ED%91%B8%EC%A7%90%ED%95%9C"
+                  },
+                  {
+                      "name":  "먹쿠슬낭 여행자카페",
+                      "category":  "카페",
+                      "dong":  "오라동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 오라로 24 1층",
+                      "description":  "공항에서 가까워 여행객이 많이 찾는 카페로, 애플망고 음료와 빙수가 알려져 있다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://polle.com/place/10EVND/%EB%A8%B9%EC%BF%A0%EC%8A%AC%EB%82%AD%20%EC%97%AC%ED%96%89%EC%9E%90%EC%B9%B4%ED%8E%98"
+                  },
+                  {
+                      "name":  "솔정가든 제주공항",
+                      "category":  "음식점",
+                      "dong":  "오라동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 오라로12길 9",
+                      "description":  "백숙과 녹두삼계탕을 내는 식당으로 브레이크 타임이 있다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/list.dc?query=%EC%A0%9C%EC%A3%BC+%EC%A0%9C%EC%A3%BC%EC%8B%9C+%EC%98%A4%EB%9D%BC%EB%8F%99+%ED%91%B8%EC%A7%90%ED%95%9C"
+                  },
+                  {
+                      "name":  "연정식당",
+                      "category":  "음식점",
+                      "dong":  "연동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 연동 256",
+                      "description":  "매일 09:00~21:00 영업하는 식당으로 소개된다(일요일 휴무는 첫째·셋째 주).",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.soonwidot.co.kr/rank/list.php?id=12667"
+                  },
+                  {
+                      "name":  "제주대통",
+                      "category":  "음식점",
+                      "dong":  "연동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 연동 1532-2",
+                      "description":  "순대국밥과 고기국밥 등을 내는 식당으로 소개된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.soonwidot.co.kr/rank/list.php?id=12667"
+                  },
+                  {
+                      "name":  "이게밥도둑",
+                      "category":  "음식점",
+                      "dong":  "연동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 연동 291-58",
+                      "description":  "간장게장과 흑돼지오겹살 등을 내는 식당으로 월요일 휴무로 안내된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.soonwidot.co.kr/rank/list.php?id=12667"
+                  },
+                  {
+                      "name":  "덤불 카페",
+                      "category":  "카페",
+                      "dong":  "연동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 연동 (상세 주소 미확인)",
+                      "description":  "공항 가까이에 있는 조용한 산장 분위기의 카페로, 두유커피가 시그니처 메뉴로 소개된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://daangn.com/kr/local-profile/%EB%8D%A4%EB%B6%88-%EC%B9%B4%ED%8E%98-sc9betakrpsu/"
+                  },
+                  {
+                      "name":  "돌담흑돼지 연동",
+                      "category":  "음식점",
+                      "dong":  "연동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 연동7길 35 2층",
+                      "description":  "흑돼지 구이 식당으로 식신 연동 맛집 목록에 올라 있다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/search?keywords=%EC%A0%9C%EC%A3%BC%EC%97%B0%EB%8F%99%EB%A7%9B%EC%A7%91"
+                  },
+                  {
+                      "name":  "노형집밥",
+                      "category":  "음식점",
+                      "dong":  "노형동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 다랑곶1길 9, 1층 (노형동)",
+                      "description":  "노형동의 가정식 식당으로 소개된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://triple.guide/restaurants/7c8d05f0-f3db-4d40-9dcf-3f103119b126"
+                  },
+                  {
+                      "name":  "제주본참숯불갈비",
+                      "category":  "음식점",
+                      "dong":  "노형동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 원노형남1길 31",
+                      "description":  "단체 모임에 적합한 숯불갈비집으로 소개된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/theme/magazine/7987"
+                  },
+                  {
+                      "name":  "제철별미횟집",
+                      "category":  "음식점",
+                      "dong":  "노형동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 원노형3길 28 1층",
+                      "description":  "제철 코스와 스끼다시가 알려진 모둠회 전문점.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/theme/magazine/8112"
+                  },
+                  {
+                      "name":  "에카그",
+                      "category":  "카페",
+                      "dong":  "노형동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 노형동 (한라대 근처, 상세 주소 미확인)",
+                      "description":  "바스크 치즈케이크, 과일모찌, 스콘과 제주 말차라테 등으로 알려진 디저트 카페.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://daangn.com/kr/local-profile/%EC%97%90%EC%B9%B4%EA%B7%B8-b61q9it8z5yh/"
+                  },
+                  {
+                      "name":  "스물다섯",
+                      "category":  "카페",
+                      "dong":  "노형동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 노형동 (상세 주소 미확인)",
+                      "description":  "콜드브루 원액을 얼린 커피큐브 메뉴와 넓은 테이블로 소개된 카페.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://daangn.com/kr/local-profile/%EC%8A%A4%EB%AC%BC%EB%8B%A4%EC%84%AF-9hcufwr88hnw/"
+                  },
+                  {
+                      "name":  "외도 용국수",
+                      "category":  "음식점",
+                      "dong":  "외도동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 외도일동 401-4",
+                      "description":  "고기국수가 대표 메뉴인 식당으로 평일 07:00~20:00 운영.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=xCNtQy1yVnJC"
+                  },
+                  {
+                      "name":  "성은식당",
+                      "category":  "음식점",
+                      "dong":  "외도동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 외도일동 418-9",
+                      "description":  "외도 맛집 목록에 오른 식당으로 화~일 08:30~21:00 영업, 월요일 휴무.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/theme/magazine/11143"
+                  },
+                  {
+                      "name":  "외도339",
+                      "category":  "카페",
+                      "dong":  "외도동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 외도이동 339",
+                      "description":  "외도포구 근처의 오션뷰 베이커리 카페.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/list.dc?query=%EC%A0%9C%EC%A3%BC%EB%8F%84+%EC%A0%9C%EC%A3%BC%EC%8B%9C+%EC%99%B8%EB%8F%84%EC%9D%B4%EB%8F%99"
+                  },
+                  {
+                      "name":  "그럼외도",
+                      "category":  "카페",
+                      "dong":  "외도동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 월대3길 16",
+                      "description":  "돌담으로 둘러싸인 옛 주택 두 채를 개조한 카페로 증편과 돌멩이라테가 시그니처이며 화요일 휴무.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://polle.com/place/2p3iMl/%EA%B7%B8%EB%9F%BC%EC%99%B8%EB%8F%84"
+                  },
+                  {
+                      "name":  "제주몹시",
+                      "category":  "카페",
+                      "dong":  "외도동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 월대1길 10",
+                      "description":  "바다 전망의 카페로 직접 로스팅한 원두와 치아바타·브리오슈식빵 브런치가 알려져 있다(수요일 휴무).",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.ktriptips.com/kor/food/2849994"
+                  },
+                  {
+                      "name":  "자매국수",
+                      "category":  "음식점",
+                      "dong":  "이호동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 이호동 (이호테우해변 인근, 상세 주소 미확인)",
+                      "description":  "이호테우해변 인근의 고기국수 식당으로 고기국수, 비빔국수, 돔베고기가 추천 메뉴로 소개된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://brunch.co.kr/@easystep/64"
+                  },
+                  {
+                      "name":  "제주구옥",
+                      "category":  "카페",
+                      "dong":  "이호동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 이호일동 (상세 번지 미확인)",
+                      "description":  "이호테우해수욕장 앞의 카페 겸 빈티지숍으로 소개된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://kr.trip.com/moments/theme/poi-ihoteu-beach-24651187-restaurant-993134/"
+                  },
+                  {
+                      "name":  "어제보다오늘",
+                      "category":  "카페",
+                      "dong":  "이호동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 서해안로 68",
+                      "description":  "이호테우해변 근처의 오션뷰 카페로 디저트와 바다·정원 전망이 알려져 있다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://kr.trip.com/moments/theme/poi-ihoteu-beach-24651187-restaurant-993134/"
+                  },
+                  {
+                      "name":  "도두봉식당",
+                      "category":  "음식점",
+                      "dong":  "도두동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 도두1동 2626-5",
+                      "description":  "도두동의 한식 식당으로 07:00~21:00 영업으로 안내된다(오래된 정보).",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.thefestival.co.kr/info/food/4164/"
+                  },
+                  {
+                      "name":  "도두어부의밥상",
+                      "category":  "음식점",
+                      "dong":  "도두동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 서해안로 181",
+                      "description":  "갈치조림으로 알려진 식당으로 10:00~21:00 영업, 목요일 정기휴무.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=JYnhFZ6go6jX"
+                  },
+                  {
+                      "name":  "도두항식당",
+                      "category":  "음식점",
+                      "dong":  "도두동",
+                      "area":  "제주시",
+                      "address":  "제주특별자치도 제주시 도두항서길 11-2",
+                      "description":  "접짝뼈놈삐국(몸국류)이 대표 메뉴인 식당으로 목요일 휴무.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=19cHowlnMI7v"
+                  },
+                  {
+                      "name":  "남궁미락",
+                      "category":  "음식점",
+                      "dong":  "송산동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 송산동 726-11",
+                      "description":  "갈치회와 갈치조림 등 갈치 요리를 내는 식당이다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://soonwidot.com/rank/detail.php?stx=%25EC%2584%259C%25EA%25B7%2580%25ED%258F%25AC%25EC%258B%259C%25EC%2586%25A1%25EC%2582%25B0%25EB%258F%2599%25EB%25A7%259B%25EC%25A7%2591\u0026id=15297130\u0026rcid=12681"
+                  },
+                  {
+                      "name":  "서작가 초밥집",
+                      "category":  "음식점",
+                      "dong":  "송산동",
+                      "area":  "서귀포시",
+                      "address":  "제주 서귀포시 태평로 416-1",
+                      "description":  "태평로에 있는 초밥집으로 후기 사이트에 등록되어 있다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://polle.com/place/55Mx07/%EC%84%9C%EC%9E%91%EA%B0%80%20%EC%B4%88%EB%B0%A5%EC%A7%91"
+                  },
+                  {
+                      "name":  "벌집식당",
+                      "category":  "음식점",
+                      "dong":  "송산동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 송산동 573-3 (태평로 416)",
+                      "description":  "도가니탕을 내는 식당으로, 일요일과 명절에 쉬는 것으로 안내된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://soonwidot.com/rank/detail.php?stx=%25EC%2584%259C%25EA%25B7%2580%25ED%258F%25AC%25EC%258B%259C%25EC%2586%25A1%25EC%2582%25B0%25EB%258F%2599%25EB%25A7%259B%25EC%25A7%2591\u0026id=15297130\u0026rcid=12681"
+                  },
+                  {
+                      "name":  "유동커피",
+                      "category":  "카페",
+                      "dong":  "송산동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 태평로 406-1 (서귀동 581-4)",
+                      "description":  "올레시장과 이중섭거리 근처에서 직접 로스팅한 원두를 쓰는 로스터리 카페로, 시그니처 메뉴 \u0027송산동커피\u0027가 있다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.ktriptips.com/kor/food/2833269"
+                  },
+                  {
+                      "name":  "허니문하우스",
+                      "category":  "카페",
+                      "dong":  "송산동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 칠십리로 228-13 (토평동 511)",
+                      "description":  "옛 파라다이스호텔 부지 일부를 고쳐 2018년 11월 카페로 문을 연 곳으로, 서귀포 KAL호텔 옆에 있다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://polle.com/place/1wF4HJ/%ED%97%88%EB%8B%88%EB%AC%B8%20%ED%95%98%EC%9A%B0%EC%8A%A4"
+                  },
+                  {
+                      "name":  "깡촌흑돼지 서귀포점",
+                      "category":  "음식점",
+                      "dong":  "정방동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 태평로 430 1층",
+                      "description":  "올레시장 인근에서 연탄불에 구운 흑돼지를 멜젓과 함께 내는 곳으로 소개된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/P/1707628"
+                  },
+                  {
+                      "name":  "쌍둥이횟집",
+                      "category":  "음식점",
+                      "dong":  "정방동",
+                      "area":  "서귀포시",
+                      "address":  "제주 서귀포시 중정로62번길 14",
+                      "description":  "서귀포항 일대에서 가성비 좋은 횟집으로 소개되며 대기가 길 수 있다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://polle.com/place/2Y2WST/%EC%8C%8D%EB%91%A5%EC%9D%B4%ED%9A%9F%EC%A7%91"
+                  },
+                  {
+                      "name":  "중앙통닭",
+                      "category":  "음식점",
+                      "dong":  "중앙동",
+                      "area":  "서귀포시",
+                      "address":  "제주 서귀포시 중앙로48번길 14-1",
+                      "description":  "올레시장 근처에서 마늘을 얹은 마농치킨으로 알려진 치킨집이다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://polle.com/place/1MKXKj/%EC%A4%91%EC%95%99%ED%86%B5%EB%8B%AD"
+                  },
+                  {
+                      "name":  "옛날순대",
+                      "category":  "음식점",
+                      "dong":  "중앙동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 중앙로 155",
+                      "description":  "찹쌀순대와 순대백반, 맑은 사골 국물로 알려진 순대국밥집이다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/P/397836"
+                  },
+                  {
+                      "name":  "네거리식당",
+                      "category":  "음식점",
+                      "dong":  "천지동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 서문로29번길 20",
+                      "description":  "갈치국으로 알려진 식당으로, 천지연폭포에서 멀지 않은 곳에 있다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/toplists/best/021992_jeju"
+                  },
+                  {
+                      "name":  "수희식당",
+                      "category":  "음식점",
+                      "dong":  "천지동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 서귀동 447",
+                      "description":  "갈치조림과 전복뚝배기, 성게미역국을 내며 아침 식사도 되는 식당이다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://soonwidot.com/rank/detail.php?stx=%25EC%2584%259C%25EA%25B7%2580%25ED%258F%25AC%25EC%258B%259C%25EC%2586%25A1%25EC%2582%25B0%25EB%258F%2599%25EB%25A7%259B%25EC%25A7%2591\u0026id=15297130\u0026rcid=12681"
+                  },
+                  {
+                      "name":  "카페 블루하우스 서귀포점",
+                      "category":  "카페",
+                      "dong":  "천지동",
+                      "area":  "서귀포시",
+                      "address":  "제주 서귀포시 천지로 51 1층",
+                      "description":  "홍콩식 밀크티와 에그타르트, 파니니를 파는 밀크티 전문 카페다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://polle.com/place/36V7WL/%EC%B9%B4%ED%8E%98%20%EB%B8%94%EB%A3%A8%ED%95%98%EC%9A%B0%EC%8A%A4"
+                  },
+                  {
+                      "name":  "플레이커피랩",
+                      "category":  "카페",
+                      "dong":  "천지동",
+                      "area":  "서귀포시",
+                      "address":  "제주 서귀포시 서문로28번길 2 1층",
+                      "description":  "직접 로스팅한 스페셜티 커피를 내는 서귀포 시내 로스터리 카페로 소개된다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.ardentnews.co.kr/news/articleView.html?idxno=586"
+                  },
+                  {
+                      "name":  "효돈 연탄구이",
+                      "category":  "음식점",
+                      "dong":  "효돈동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 하신상로 7",
+                      "description":  "연탄불에 구운 두툼한 오겹살을 멸치젓 소스에 찍어 먹는 고깃집이다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://triple.guide/restaurants/6b03bb1b-d12c-4e36-bb42-99b8df277167"
+                  },
+                  {
+                      "name":  "부에난 소라 하효 마을",
+                      "category":  "음식점",
+                      "dong":  "효돈동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 쇠소깍로 151-7",
+                      "description":  "해녀가 직접 잡은 해산물 요리를 내는 오션뷰 식당이다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://triple.guide/restaurants/972783c4-55d3-4bda-a684-9699924c836f"
+                  },
+                  {
+                      "name":  "오하효",
+                      "category":  "카페",
+                      "dong":  "효돈동",
+                      "area":  "서귀포시",
+                      "address":  "제주 서귀포시 칠십리로 752 탐라수퍼 2층",
+                      "description":  "핸드드립 커피와 생초콜릿으로 알려진 조용한 카페다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://polle.com/place/2srKAW/%EC%98%A4%ED%95%98%ED%9A%A8"
+                  },
+                  {
+                      "name":  "삼강식당 효돈점",
+                      "category":  "음식점",
+                      "dong":  "효돈동",
+                      "area":  "서귀포시",
+                      "address":  "제주 서귀포시 하효동 (도로명 미확인)",
+                      "description":  "오리 샤브샤브로 알려진 식당이다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=jjcdUb4Y90ZK"
+                  },
+                  {
+                      "name":  "토평골",
+                      "category":  "음식점",
+                      "dong":  "영천동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 중산간동로 7715",
+                      "description":  "흑돼지 숯불구이와 푸른콩된장찌개를 내는 작은 흑돼지 식당으로 저녁에만 연다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=CflWB2MwTbEV"
+                  },
+                  {
+                      "name":  "토평해뜨는집",
+                      "category":  "음식점",
+                      "dong":  "영천동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 중산간동로 7716 (토평동 1244-2)",
+                      "description":  "생갈비와 양념갈비, 제주 흑돼지 오겹살을 파는 고깃집이다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=SliyAqVED1wC"
+                  },
+                  {
+                      "name":  "서가앤쿡 서귀포토평점",
+                      "category":  "음식점",
+                      "dong":  "영천동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 검은여로 191 1층 (토평동 1045-3)",
+                      "description":  "목살 한상과 파스타를 내는 양식당으로 주차장이 넓다.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=U9hDx2RlYxBQ"
+                  },
+                  {
+                      "name":  "휘게카페",
+                      "category":  "카페",
+                      "dong":  "동홍동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 동홍중앙로 49, 6층",
+                      "description":  "동홍중앙로 건물 6층에 있는 카페.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://triple.guide/restaurants/0e7bf36f-aac4-443e-a7c1-3b07315c5a4e"
+                  },
+                  {
+                      "name":  "소요유",
+                      "category":  "카페",
+                      "dong":  "동홍동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 일주동로8666번길 7 (동홍동 1488-2)",
+                      "description":  "동홍동 일주동로8666번길 일대에 있는 카페로 지역 상가 정보에 등재됨.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "http://localmap.co.kr/web/splus/kmap/view.php?sigun=6500000\u0026gugun=6520000\u0026keyno=1\u0026keyname=%EC%86%8C%EC%9A%94%EC%9C%A0\u0026keylink=6520000-104-2012-00066"
+                  },
+                  {
+                      "name":  "동홍분식",
+                      "category":  "음식점",
+                      "dong":  "동홍동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 동홍로 205",
+                      "description":  "동홍동에 있는 분식집으로 소개된 식당.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://triple.guide/restaurants/f3c580a9-953c-4c46-823a-0b434d928ba8"
+                  },
+                  {
+                      "name":  "동홍파스타",
+                      "category":  "음식점",
+                      "dong":  "동홍동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 동홍동로 44",
+                      "description":  "서귀포 파스타·파스타샐러드 맛집으로 소개된 식당.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=Lr53fdhwnf4n"
+                  },
+                  {
+                      "name":  "대도식당 동홍점",
+                      "category":  "음식점",
+                      "dong":  "동홍동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 동홍중앙로52번길 28",
+                      "description":  "동홍동 소재로 행정안전부 인허가 데이터(2025-07-27 갱신)에 등재된 식당.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "http://localmap.co.kr/web/splus/kmap/view.php?sigun=6500000\u0026gugun=6520000\u0026keyno=116\u0026keyname=%EB%8C%80%EB%8F%84%EC%8B%9D%EB%8B%B9%EB%8F%99%ED%99%8D%EC%A0%90\u0026keylink=6520000-101-2000-00073"
+                  },
+                  {
+                      "name":  "유동커피로스팅팩토리",
+                      "category":  "카페",
+                      "dong":  "서홍동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 솜반천로6번길 11",
+                      "description":  "직접 로스팅한 원두로 드립커피를 내는 서홍동 카페.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://kr.trip.com/moments/detail/jeju-city-1446512-136316364/"
+                  },
+                  {
+                      "name":  "들렁모루 점심",
+                      "category":  "음식점",
+                      "dong":  "서홍동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 서홍동 2442-6",
+                      "description":  "오리탕과 들깨백숙을 내는 식당.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/theme/magazine/15108"
+                  },
+                  {
+                      "name":  "고미 커피",
+                      "category":  "카페",
+                      "dong":  "서홍동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 일주동로 8796 (서홍동)",
+                      "description":  "스콘이 인기 메뉴인 아늑한 분위기의 카페.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://triple.guide/restaurants/12fc1158-f2cd-4201-9f88-2c28c10f2b23"
+                  },
+                  {
+                      "name":  "카페텐저린",
+                      "category":  "카페",
+                      "dong":  "대륜동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 이어도로 880 (법환동 1298-3)",
+                      "description":  "옥상에서 범섬이 보이는 법환동 카페.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/list.dc?query=%EB%B2%95%ED%99%98%ED%8F%AC%EA%B5%AC+%EC%B9%B4%ED%8E%98"
+                  },
+                  {
+                      "name":  "법환포구식당",
+                      "category":  "음식점",
+                      "dong":  "대륜동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 법환동 278",
+                      "description":  "법환포구 인근 식당으로 법환동 맛집 목록에 등재됨.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://place.udanax.org/place.php?placeName=%EB%B2%95%ED%99%98%ED%8F%AC%EA%B5%AC%EC%8B%9D%EB%8B%B9\u0026id=83219"
+                  },
+                  {
+                      "name":  "더벤티 법환포구점",
+                      "category":  "카페",
+                      "dong":  "대륜동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 막숙포로 68 (법환동 161-4)",
+                      "description":  "법환포구 인근의 테이크아웃 위주 카페.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.siksinhot.com/P/1537007"
+                  },
+                  {
+                      "name":  "제주소담카페",
+                      "category":  "카페",
+                      "dong":  "대륜동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 막숙포로 150 (법환동 1531-2)",
+                      "description":  "법환 앞바다가 보이는 플라워카페.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.visitjeju.net/kr/detail/view?contentsid=CNTS_300000000015731"
+                  },
+                  {
+                      "name":  "강정뷔페",
+                      "category":  "음식점",
+                      "dong":  "대천동",
+                      "area":  "서귀포시",
+                      "address":  "제주 서귀포시 이어도로 604 1층 (강정동 2851-3)",
+                      "description":  "한식뷔페로 알려진 식당.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=ueSVrL2WxFuV"
+                  },
+                  {
+                      "name":  "둠비정원",
+                      "category":  "음식점",
+                      "dong":  "대천동",
+                      "area":  "서귀포시",
+                      "address":  "제주 서귀포시 신중로13번길 20 (강정동)",
+                      "description":  "순두부찌개 등 두부 요리를 내는 서귀포 신시가지 식당.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://kr.trip.com/moments/detail/jeju-1446512-135771813/"
+                  },
+                  {
+                      "name":  "에이바우트커피뷰 강정점",
+                      "category":  "카페",
+                      "dong":  "대천동",
+                      "area":  "서귀포시",
+                      "address":  "제주 서귀포시 선반로65번길 37-31 (강정동 882-1)",
+                      "description":  "넓은 주차장과 07시~22시30분 영업으로 소개된 커피 전문 카페.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/profile.php?rid=bmqRSfKxZEDW"
+                  },
+                  {
+                      "name":  "갈치카페 제주",
+                      "category":  "카페",
+                      "dong":  "중문동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 색달중앙로185번길 64-7",
+                      "description":  "색달동에 있는 카페.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/list.dc?query=%EC%A0%9C%EC%A3%BC+%EC%84%9C%EA%B7%80%ED%8F%AC%EC%8B%9C+%EC%83%89%EB%8B%AC%EC%A4%91%EC%95%99%EB%A1%9C"
+                  },
+                  {
+                      "name":  "중문 수두리 보말칼국수",
+                      "category":  "음식점",
+                      "dong":  "중문동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 천제연로 192",
+                      "description":  "중문 지역 보말칼국수 식당으로 중문 맛집 목록에 등재됨.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.jeju.com/item/ld_keyword.html?kno=24088"
+                  },
+                  {
+                      "name":  "욜다 서귀포 중문점",
+                      "category":  "음식점",
+                      "dong":  "중문동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 색달중앙로 192",
+                      "description":  "흑돼지 전문점.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/list.dc?query=%EC%A0%9C%EC%A3%BC+%EC%84%9C%EA%B7%80%ED%8F%AC%EC%8B%9C+%EC%83%89%EB%8B%AC%EC%A4%91%EC%95%99%EB%A1%9C"
+                  },
+                  {
+                      "name":  "더클리프",
+                      "category":  "카페",
+                      "dong":  "중문동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 중문관광로 154-17 (색달동)",
+                      "description":  "해변과 석양 전망의 카페 겸 펍으로 버거·파스타·칵테일 메뉴가 있음.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://polle.com/place/2cQQGv/%EB%8D%94%20%ED%81%B4%EB%A6%AC%ED%94%84"
+                  },
+                  {
+                      "name":  "색달해녀의집",
+                      "category":  "음식점",
+                      "dong":  "중문동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 중문관광로 154-17 (색달동)",
+                      "description":  "돌문어와 쥐치 등 해산물이 인기인 해녀의집.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://m.tripinfo.co.kr/info.html?content_id=2708692\u0026content_type_id=39"
+                  },
+                  {
+                      "name":  "바다목장 횟집",
+                      "category":  "음식점",
+                      "dong":  "예래동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 하예동 452",
+                      "description":  "하예동의 횟집.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.visitjeju.net/kr/detail/view?contentsid=CNTS_000000000021391"
+                  },
+                  {
+                      "name":  "해주소반 예래점",
+                      "category":  "음식점",
+                      "dong":  "예래동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 예래로 307 1층",
+                      "description":  "예래로변 식당.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.diningcode.com/list.dc?query=%EC%A0%9C%EC%A3%BC%ED%8A%B9%EB%B3%84%EC%9E%90%EC%B9%98%EB%8F%84+%EC%84%9C%EA%B7%80%ED%8F%AC%EC%8B%9C+%EC%98%88%EB%9E%98%EB%A1%9C"
+                  },
+                  {
+                      "name":  "쏠티브리즈",
+                      "category":  "카페",
+                      "dong":  "예래동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 예래로 88",
+                      "description":  "예래동 주민센터 근처 카페로 화요일 휴무.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://m.tripinfo.co.kr/info.html?content_id=2864347\u0026content_type_id=39\u0026rd=%2Frd%2Fm%2Finfo%2Ffood"
+                  },
+                  {
+                      "name":  "마녀의 언덕",
+                      "category":  "카페",
+                      "dong":  "예래동",
+                      "area":  "서귀포시",
+                      "address":  "제주 서귀포시 예래해안로 205 1층",
+                      "description":  "바다 전망의 카페로 음료와 베이커리, 브런치 메뉴가 있음.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://polle.com/place/2fEJtG/%EB%A7%88%EB%85%80%EC%9D%98%20%EC%96%B8%EB%8D%95"
+                  },
+                  {
+                      "name":  "카페예래",
+                      "category":  "카페",
+                      "dong":  "예래동",
+                      "area":  "서귀포시",
+                      "address":  "제주특별자치도 서귀포시 하예동 151 2층",
+                      "description":  "매일 10~20시 영업으로 소개된 예래 지역 카페.",
+                      "lat":  null,
+                      "lng":  null,
+                      "geo":  "none",
+                      "score":  null,
+                      "selected":  false,
+                      "source":  "https://www.visitjeju.net/kr/detail/view?contentsid=CNTS_000000000021391"
+                  }
+              ]
+}
+</script>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const data = JSON.parse(document.getElementById("data").textContent)
+    const items = data.items
+
+    const DONGS = [
+        ["제주시", ["일도1동", "일도2동", "이도1동", "이도2동", "삼도1동", "삼도2동", "용담1동", "용담2동", "건입동", "화북동", "삼양동", "봉개동", "아라동", "오라동", "연동", "노형동", "외도동", "이호동", "도두동"]],
+        ["서귀포시", ["송산동", "정방동", "중앙동", "천지동", "효돈동", "영천동", "동홍동", "서홍동", "대륜동", "대천동", "중문동", "예래동"]]
+    ]
+    const GOAL = 5
+    const JEJU = [33.38, 126.55]
+    const areaOf = {}
+    DONGS.forEach(([a, list]) => list.forEach(d => areaOf[d] = a))
+
+    const emptyDongs = Object.keys(areaOf).filter(d => !items.some(i => i.dong === d))
+    document.getElementById("notice").textContent =
+        `총 ${items.length}곳 (목표: 동마다 ${GOAL}곳). 검색에서 근거가 확인된 곳만 담아서 모자란 동이 있어요` +
+        (emptyDongs.length ? ` (확인된 곳 없음: ${emptyDongs.join(", ")})` : "") +
+        `. 영업 상태는 Gemini가 구글 검색으로 확인한 정보라 틀릴 수 있으니, 가기 전에 지도 앱에서 한 번 더 확인하세요.`
+
+    // ---------- 위치 계산 ----------
+    function centerOf(dong) {
+        const c = data.dongCenters && data.dongCenters[dong]
+        if (c) return [c.lat, c.lng]
+        const located = items.filter(i => i.dong === dong && i.lat != null)
+        if (located.length) {
+            return [located.reduce((s, i) => s + i.lat, 0) / located.length, located.reduce((s, i) => s + i.lng, 0) / located.length]
+        }
+        return JEJU
+    }
+    // 위치를 못 찾은 가게는 동 중심 둘레에 나눠서 놓는다. (겹치지 않게)
+    DONGS.forEach(([, list]) => list.forEach(dong => {
+        const mine = items.filter(i => i.dong === dong)
+        const lost = mine.filter(i => i.lat == null)
+        const c = centerOf(dong)
+        mine.forEach(i => {
+            if (i.lat != null) { i._pos = [i.lat, i.lng]; i._approx = false; return }
+            const k = lost.indexOf(i)
+            const ang = (2 * Math.PI * k) / Math.max(lost.length, 1)
+            i._pos = [c[0] + 0.003 * Math.sin(ang), c[1] + 0.003 * Math.cos(ang) / Math.cos(c[0] * Math.PI / 180)]
+            i._approx = true
+        })
+    }))
+
+    // ---------- 상태 ----------
+    let selected = null      // 선택한 동 (null 이면 전체)
+    let cat = "전체"
+    const statuses = {}      // 동 -> { state: 'loading'|'ok'|'error', map, checkedAt, error }
+    let openItem = null
+
+    const map = L.map("map", { worldCopyJump: false }).setView(JEJU, 10)
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map)
+    const layer = L.layerGroup().addTo(map)
+    const markerOf = new Map()
+
+    const visible = (dong) => items.filter(i => (!dong || i.dong === dong) && (cat === "전체" || i.category === cat))
+
+    // ---------- 영업 상태 표시 ----------
+    const STATUS_CLASS = { "영업중": "s-open", "영업종료": "s-end", "휴무": "s-rest", "폐업": "s-closed", "확인불가": "s-unknown" }
+    function statusOf(item) {
+        const rec = statuses[item.dong]
+        if (!rec) return { label: "확인 전", cls: "s-wait" }
+        if (rec.state === "loading") return { label: "확인 중...", cls: "s-wait s-load" }
+        if (rec.state === "error") return { label: "확인 못 함", cls: "s-unknown" }
+        const p = rec.map[item.name]
+        return p ? { label: p.status, cls: STATUS_CLASS[p.status] || "s-unknown", hours: p.hours, note: p.note } : { label: "확인불가", cls: "s-unknown" }
+    }
+    function badge(item) {
+        const s = statusOf(item)
+        const b = document.createElement("span")
+        b.className = "badge " + s.cls
+        b.textContent = s.label
+        return b
+    }
+    function infoLine(item) {
+        const s = statusOf(item)
+        const parts = []
+        if (s.hours) parts.push("오늘 " + s.hours)
+        if (s.note) parts.push(s.note)
+        return parts.join(" · ")
+    }
+
+    // 정확한 위치는 지도 앱에서 확인하도록 이름+주소로 검색하는 링크를 만든다.
+    function mapLinks(item) {
+        const q = encodeURIComponent(item.name + " " + (item.address || item.dong))
+        const wrap = document.createElement("span")
+        wrap.className = "maplinks"
+        ;[["구글지도", "https://www.google.com/maps/search/?api=1&query=" + q], ["네이버지도", "https://map.naver.com/p/search/" + q]].forEach(([label, href]) => {
+            const a = document.createElement("a")
+            a.href = href
+            a.target = "_blank"
+            a.rel = "noopener noreferrer"
+            a.textContent = label
+            a.addEventListener("click", e => e.stopPropagation())
+            wrap.appendChild(a)
+        })
+        return wrap
+    }
+
+    // ---------- 지도 ----------
+    function popupOf(item) {
+        const box = document.createElement("div")
+        box.className = "pop"
+        const h = document.createElement("h4")
+        h.textContent = item.name
+        const line1 = document.createElement("p")
+        line1.append(badge(item))
+        box.append(h, line1)
+        const info = infoLine(item)
+        if (info) { const p = document.createElement("p"); p.textContent = info; box.appendChild(p) }
+        const addr = document.createElement("p")
+        addr.textContent = item.address || ""
+        const desc = document.createElement("p")
+        desc.textContent = item.description || ""
+        box.append(addr, desc, mapLinks(item))
+        if (item._approx) { const p = document.createElement("p"); p.textContent = "※ 정확한 위치를 못 찾아 동 근처에 표시했어요."; p.className = "hint"; box.appendChild(p) }
+        return box
+    }
+
+    function drawMarkers() {
+        layer.clearLayers()
+        markerOf.clear()
+        visible(selected).forEach(item => {
+            const icon = L.divIcon({
+                className: "",
+                html: `<div class="pin ${item.category === "카페" ? "cafe" : "food"}${item._approx ? " approx" : ""}"><span>${item.category === "카페" ? "☕" : "🍽️"}</span></div>`,
+                iconSize: [30, 30], iconAnchor: [4, 30], popupAnchor: [11, -28]
+            })
+            const m = L.marker(item._pos, { icon, title: item.name }).addTo(layer)
+            m.bindPopup(() => popupOf(item))
+            m.on("popupopen", () => { openItem = item })
+            m.on("popupclose", () => { if (openItem === item) openItem = null })
+            markerOf.set(item, m)
+        })
+    }
+
+    function zoomTo(dong) {
+        if (!dong) { map.flyTo(JEJU, 10, { duration: 0.8 }); return }
+        const pts = visible(dong).map(i => i._pos)
+        const maxZ = visible(dong).every(i => i._approx) ? 15 : 16
+        if (pts.length >= 2) map.flyToBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: maxZ, duration: 0.8 })
+        else if (pts.length === 1) map.flyTo(pts[0], maxZ, { duration: 0.8 })
+        else map.flyTo(centerOf(dong), 15, { duration: 0.8 })
+    }
+
+    // ---------- 동 칩 ----------
+    function renderChips() {
+        const area = document.getElementById("chipArea")
+        area.textContent = ""
+        const resetGroup = document.createElement("div")
+        resetGroup.className = "chips"
+        const reset = document.createElement("button")
+        reset.type = "button"
+        reset.className = "chip reset"
+        reset.textContent = "🗺️ 제주 전체 보기"
+        reset.addEventListener("click", () => select(null))
+        resetGroup.appendChild(reset)
+        area.appendChild(resetGroup)
+
+        DONGS.forEach(([areaName, list]) => {
+            const g = document.createElement("div")
+            g.className = "group"
+            const h = document.createElement("h2")
+            h.textContent = areaName
+            const chips = document.createElement("div")
+            chips.className = "chips"
+            list.forEach(dong => {
+                const n = items.filter(i => i.dong === dong).length
+                const b = document.createElement("button")
+                b.type = "button"
+                b.className = "chip" + (n < GOAL ? " low" : "") + (dong === selected ? " on" : "")
+                b.append(document.createTextNode(dong + " "))
+                const sm = document.createElement("small")
+                sm.textContent = n + "곳"
+                b.appendChild(sm)
+                b.addEventListener("click", () => select(dong))
+                chips.appendChild(b)
+            })
+            g.append(h, chips)
+            area.appendChild(g)
+        })
+    }
+
+    // ---------- 선택한 동 카드 ----------
+    function renderPanel() {
+        const panel = document.getElementById("panel")
+        panel.textContent = ""
+        if (!selected) {
+            const p = document.createElement("p")
+            p.className = "empty"
+            p.textContent = "위에서 동을 하나 눌러 보세요. 지도가 그 동으로 확대되고, 카페·맛집과 영업 상태가 나와요."
+            panel.appendChild(p)
+            return
+        }
+        const list = visible(selected)
+        const head = document.createElement("div")
+        head.className = "panel-head"
+        const h = document.createElement("h2")
+        h.textContent = selected
+        const sm = document.createElement("small")
+        sm.textContent = areaOf[selected] + " · " + items.filter(i => i.dong === selected).length + "곳"
+        h.appendChild(sm)
+        head.appendChild(h)
+        panel.appendChild(head)
+
+        const rec = statuses[selected]
+        const meta = document.createElement("div")
+        meta.className = "meta"
+        if (!rec) meta.textContent = "영업 상태를 아직 확인하지 않았어요."
+        else if (rec.state === "loading") meta.textContent = "Gemini가 구글 검색으로 영업 상태를 확인하고 있어요..."
+        else if (rec.state === "ok") meta.textContent = "Gemini가 구글 검색으로 확인한 정보예요 (" + rec.checkedAt + " 기준)."
+        else { meta.className = "meta err"; meta.textContent = "영업 상태를 확인하지 못했어요: " + rec.error }
+        if (items.some(i => i.dong === selected) && (!rec || rec.state !== "loading")) {
+            const b = document.createElement("button")
+            b.type = "button"
+            b.textContent = rec && rec.state === "ok" ? "다시 확인" : "영업 상태 확인"
+            b.addEventListener("click", () => checkDong(selected, true))
+            meta.appendChild(b)
+        }
+        panel.appendChild(meta)
+
+        if (list.length === 0) {
+            const e = document.createElement("div")
+            e.className = "empty"
+            e.textContent = items.some(i => i.dong === selected) ? "이 종류의 가게는 아직 없어요." : "검색에서 확인된 곳이 아직 없어요."
+            panel.appendChild(e)
+            return
+        }
+
+        const grid = document.createElement("div")
+        grid.className = "cards"
+        list.forEach(item => {
+            const card = document.createElement("div")
+            card.className = "card"
+            const top = document.createElement("div")
+            top.className = "top"
+            const name = document.createElement("h3")
+            name.textContent = item.name
+            top.append(name, badge(item))
+            const tag = document.createElement("span")
+            tag.className = "tag " + (item.category === "카페" ? "cafe" : "food")
+            tag.textContent = item.category
+            card.append(top, tag)
+
+            const info = infoLine(item)
+            if (info) { const p = document.createElement("p"); p.className = "info"; p.textContent = "🕒 " + info; card.appendChild(p) }
+            const addr = document.createElement("p")
+            addr.className = "addr"
+            addr.textContent = item.address || ""
+            const desc = document.createElement("p")
+            desc.className = "desc"
+            desc.textContent = item.description || ""
+            card.append(addr, desc)
+            if (item._approx) { const p = document.createElement("p"); p.className = "hint"; p.textContent = "정확한 위치를 못 찾아 동 근처에 표시했어요."; card.appendChild(p) }
+            card.appendChild(mapLinks(item))
+            if (/^https?:\/\//.test(item.source || "")) {
+                const a = document.createElement("a")
+                a.href = item.source
+                a.target = "_blank"
+                a.rel = "noopener noreferrer"
+                a.textContent = "출처 보기"
+                a.addEventListener("click", e => e.stopPropagation())
+                card.appendChild(a)
+            }
+            card.addEventListener("click", () => {
+                const m = markerOf.get(item)
+                if (!m) return
+                map.flyTo(item._pos, 17, { duration: 0.6 })
+                m.openPopup()
+                document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "center" })
+            })
+            grid.appendChild(card)
+        })
+        panel.appendChild(grid)
+    }
+
+    // ---------- Gemini 영업 상태 ----------
+    async function checkDong(dong, force) {
+        const rec = statuses[dong]
+        if (rec && (rec.state === "loading" || (rec.state === "ok" && !force))) return
+        const places = items.filter(i => i.dong === dong).map(i => ({ name: i.name, address: i.address }))
+        if (places.length === 0) return
+
+        statuses[dong] = { state: "loading" }
+        refresh(false)
+        try {
+            const res = await fetch("/api/place_status", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ dong, places })
+            })
+            const j = await res.json().catch(() => ({}))
+            if (!res.ok) throw new Error(j.error || "서버 응답 오류 (" + res.status + ")")
+            statuses[dong] = { state: "ok", checkedAt: j.checkedAt, map: Object.fromEntries(j.places.map(p => [p.name, p])) }
+        } catch (err) {
+            const offline = location.protocol === "file:" || err instanceof TypeError
+            statuses[dong] = { state: "error", error: offline ? "Vercel에 배포된 주소에서만 확인할 수 있어요." : err.message }
+        }
+        refresh(false)
+        if (openItem && markerOf.get(openItem)) markerOf.get(openItem).setPopupContent(popupOf(openItem))
+    }
+
+    // ---------- 전체 갱신 ----------
+    function refresh(redrawMap) {
+        renderChips()
+        renderPanel()
+        if (redrawMap) drawMarkers()
+    }
+
+    function select(dong) {
+        selected = dong
+        refresh(true)
+        zoomTo(dong)
+        if (dong) checkDong(dong, false)
+    }
+
+    // 종류 필터
+    const catBox = document.getElementById("catSeg")
+    ;["전체", "카페", "음식점"].forEach(name => {
+        const b = document.createElement("button")
+        b.type = "button"
+        b.textContent = name
+        b.addEventListener("click", () => {
+            cat = name
+            ;[...catBox.children].forEach(x => x.classList.toggle("on", x.textContent === cat))
+            refresh(true)
+            if (selected) zoomTo(selected)
+        })
+        catBox.appendChild(b)
+    })
+    catBox.children[0].classList.add("on")
+
+    refresh(true)
+</script>
+</body>
+</html>
