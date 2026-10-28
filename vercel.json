@@ -1,0 +1,5 @@
+{
+  "functions": {
+    "api/place_status.js": { "maxDuration": 30 }
+  }
+}
